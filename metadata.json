@@ -1,0 +1,7 @@
+{
+  "name": "Nur Ramadan - Daily Companion",
+  "description": "A clean, modern daily routine and habit builder for Ramadan, featuring prayer tracking, Quran goals, and AI-powered recipe suggestions.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
