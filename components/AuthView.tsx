@@ -107,8 +107,11 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             ) : (
               <div className="p-4 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-100 text-xs text-left space-y-2">
                 <p className="font-semibold">Google Sign-In is not configured.</p>
-                <p>Set <code className="bg-black/20 px-1 rounded">VITE_GOOGLE_CLIENT_ID</code> in your <code className="bg-black/20 px-1 rounded">.env</code> and create OAuth credentials in Google Cloud Console.</p>
+                <p>Set <code className="bg-black/20 px-1 rounded">VITE_GOOGLE_CLIENT_ID</code> in your <code className="bg-black/20 px-1 rounded">.env</code> and create OAuth credentials in Google Cloud Console. Add your app URL to Authorized JavaScript origins.</p>
               </div>
+            )}
+            {GOOGLE_CLIENT_ID && (
+              <p className="text-primary-300/60 text-[10px] text-center">If the Google button doesn&apos;t load, add <code className="bg-black/20 px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : 'your origin'}</code> to Authorized JavaScript origins in Google Cloud Console and try disabling ad blockers.</p>
             )}
 
             <div className="flex flex-col items-center gap-4">

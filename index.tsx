@@ -14,7 +14,7 @@ const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       {clientId ? (
         <GoogleOAuthProvider clientId={clientId}>
           <App />

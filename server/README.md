@@ -4,15 +4,13 @@ Minimal Express + MongoDB API for syncing user data. The frontend uses **Indexed
 
 ## Security
 
-- **MONGODB_URI** and **GOOGLE_CLIENT_ID** stay in server env only (never in frontend).
+- **MONGODB_URI** stays in server env. **VITE_GOOGLE_CLIENT_ID** is set once in the root `.env` and used by both frontend and server (server loads root .env).
 - Every request must send `Authorization: Bearer <google-id-token>`. The server verifies the token with Google and uses the token’s `email` to scope all data.
 - Use **HTTPS** in production. Set **CORS_ORIGIN** to your frontend origin in production.
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and set:
-   - **MONGODB_URI** — MongoDB connection string (e.g. [MongoDB Atlas](https://www.mongodb.com/atlas) or local).
-   - **GOOGLE_CLIENT_ID** — Same value as `VITE_GOOGLE_CLIENT_ID` in the frontend (used to verify ID tokens).
+1. Copy `.env.example` to `.env` and set **MONGODB_URI** (e.g. [MongoDB Atlas](https://www.mongodb.com/atlas) or local). The server reads **VITE_GOOGLE_CLIENT_ID** from the root `.env` (same variable as the frontend; no need to set it in server/.env).
 2. Install and run:
    ```bash
    cd server && npm install && npm run dev
