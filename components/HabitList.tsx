@@ -87,7 +87,7 @@ const HabitList: React.FC<HabitListProps> = ({
         <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Routine Builder</h2>
         <button 
           onClick={() => setIsAddingHabit(true)}
-          className="bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary-900/10 active:scale-95 transition-all"
+          className="bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-primary-900/10 active:scale-95 transition-all min-h-[44px]"
         >
           <Plus className="w-3 h-3" /> ADD CUSTOM
         </button>
@@ -129,7 +129,7 @@ const HabitList: React.FC<HabitListProps> = ({
                               ))}
                             </div>
                           )}
-                          <button onClick={() => handleToggle(habit)} className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-75 relative z-10 ${isCompleted ? 'bg-primary-500 shadow-lg shadow-primary-200 dark:shadow-primary-900' : 'border-2 border-slate-200 dark:border-slate-700 hover:border-primary-300'}`}>
+                          <button onClick={() => handleToggle(habit)} aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'} className={`min-w-[44px] min-h-[44px] w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-75 relative z-10 ${isCompleted ? 'bg-primary-500 shadow-lg shadow-primary-200 dark:shadow-primary-900' : 'border-2 border-slate-200 dark:border-slate-700 hover:border-primary-300'}`}>
                             {isCompleted ? <Check className="w-4 h-4 text-white" /> : <div className="w-1.5 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full" />}
                           </button>
                         </div>
@@ -156,11 +156,11 @@ const HabitList: React.FC<HabitListProps> = ({
                       <div className="flex items-center gap-2 ml-2 relative z-10">
                         {isCounter && !isCompleted && (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => onUpdateValue(habit.id, -(habit.step || 1))} className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-90 transition-transform"><Minus className="w-3 h-3" /></button>
-                            <button onClick={() => onUpdateValue(habit.id, (habit.step || 1))} className="p-1.5 bg-primary-600 rounded-lg text-white hover:bg-primary-700 active:scale-90 transition-transform"><Plus className="w-3 h-3" /></button>
+                            <button onClick={() => onUpdateValue(habit.id, -(habit.step || 1))} aria-label="Decrease" className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"><Minus className="w-3 h-3" /></button>
+                            <button onClick={() => onUpdateValue(habit.id, (habit.step || 1))} aria-label="Increase" className="p-2 bg-primary-600 rounded-lg text-white hover:bg-primary-700 active:scale-90 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"><Plus className="w-3 h-3" /></button>
                           </div>
                         )}
-                        {habit.category === TaskCategory.CUSTOM && <button onClick={() => onDeleteHabit(habit.id)} className="p-1.5 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors active:scale-90"><Trash2 className="w-4 h-4" /></button>}
+                        {habit.category === TaskCategory.CUSTOM && <button onClick={() => onDeleteHabit(habit.id)} aria-label="Delete habit" className="p-2 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors active:scale-90 min-w-[44px] min-h-[44px] flex items-center justify-center"><Trash2 className="w-4 h-4" /></button>}
                       </div>
                     </div>
                   </div>

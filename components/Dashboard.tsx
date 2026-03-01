@@ -14,16 +14,34 @@ import {
   Zap,
   Flame,
   History,
-  CloudOff
+  CloudOff,
+  AlertCircle
 } from 'lucide-react';
-import { Habit, QuranProgress, View, HabitType } from '../types';
-import { getSpiritualReflection } from '../services/geminiService';
+import { Habit, QuranProgress, View } from '../types';
+import { getSpiritualReflection, getLocalReflection, isGeminiAvailable } from '../services/geminiService';
 import { PrayerData } from '../services/prayerService';
+
+const QUOTABLE_URL = 'https://api.quotable.io/random';
+
+async function fetchPublicQuote(): Promise<string> {
+  const today = new Date().toDateString();
+  const cached = localStorage.getItem('nur_public_quote_text');
+  const cachedDate = localStorage.getItem('nur_public_quote_date');
+  if (cached && cachedDate === today) return cached;
+  const res = await fetch(QUOTABLE_URL);
+  if (!res.ok) throw new Error('Quote API failed');
+  const data = await res.json();
+  const text = data.content + (data.author ? ` — ${data.author}` : '');
+  localStorage.setItem('nur_public_quote_text', text);
+  localStorage.setItem('nur_public_quote_date', today);
+  return text;
+}
 
 interface DashboardProps {
   habits: Habit[];
   quran: QuranProgress;
   prayerData: PrayerData | null;
+  prayerError?: string | null;
   locationName: string;
   currentDate: Date;
   onDateChange: (offset: number) => void;
@@ -34,6 +52,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   habits, 
   quran, 
   prayerData, 
+  prayerError, 
   locationName, 
   currentDate, 
   onDateChange, 
@@ -43,22 +62,47 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [countdown, setCountdown] = useState<string>("--:--:--");
   const [nextPrayerName, setNextPrayerName] = useState<string>("Calculating...");
   const [isOffline, setIsOffline] = useState(false);
+  const [wisdomLoading, setWisdomLoading] = useState(true);
+  const [aiReflectionLoading, setAiReflectionLoading] = useState(false);
 
+  // Default wisdom: public API (no AI). Fallback to local list on failure. No automatic AI calls.
   useEffect(() => {
-    const fetchReflection = async () => {
-        try {
-            const res = await getSpiritualReflection();
-            setReflection(res);
-            setIsOffline(localStorage.getItem('nur_daily_reflection_date') !== new Date().toDateString());
-        } catch {
-            setReflection("The best of people are those that bring most benefit to others.");
-            setIsOffline(true);
+    let cancelled = false;
+    const load = async () => {
+      setWisdomLoading(true);
+      try {
+        const text = await fetchPublicQuote();
+        if (!cancelled) setReflection(text);
+        if (!cancelled) setIsOffline(false);
+      } catch {
+        if (!cancelled) {
+          setReflection(getLocalReflection());
+          setIsOffline(true);
         }
+      } finally {
+        if (!cancelled) setWisdomLoading(false);
+      }
     };
-    fetchReflection();
+    load();
+    return () => { cancelled = true; };
   }, []);
 
+  const handleGetAiReflection = async () => {
+    if (!isGeminiAvailable()) return;
+    setAiReflectionLoading(true);
+    try {
+      const text = await getSpiritualReflection();
+      setReflection(text);
+      setIsOffline(false);
+    } catch {
+      setReflection(getLocalReflection());
+    } finally {
+      setAiReflectionLoading(false);
+    }
+  };
+
   const isToday = new Date().toDateString() === currentDate.toDateString();
+  const isPastDay = currentDate < new Date() && !isToday;
   const isRamadan = prayerData?.date.hijri.month.number === 9;
 
   const weeklyOutlook = useMemo(() => {
@@ -162,14 +206,21 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {prayerError && (
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-sm">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>{prayerError}</span>
+          <button onClick={() => onNavigate('settings')} className="ml-auto text-xs font-bold underline min-h-[44px] flex items-center">Settings</button>
+        </div>
+      )}
       {/* Date Switcher */}
       <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-4 py-3 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 transition-colors">
-        <button onClick={() => onDateChange(-1)} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full transition-colors"><ChevronLeft className="w-5 h-5 text-slate-400" /></button>
+        <button onClick={() => onDateChange(-1)} aria-label="Previous day" className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"><ChevronLeft className="w-5 h-5 text-slate-400" /></button>
         <div className="flex flex-col items-center">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">{isToday ? "Today" : currentDate.toLocaleDateString(undefined, { weekday: 'long' })}</span>
           <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{currentDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>
         </div>
-        <button onClick={() => onDateChange(1)} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full transition-colors"><ChevronRight className="w-5 h-5 text-slate-400" /></button>
+        <button onClick={() => onDateChange(1)} aria-label="Next day" className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"><ChevronRight className="w-5 h-5 text-slate-400" /></button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -204,9 +255,11 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="relative z-10">
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">
                 <Timer className={`w-3 h-3 ${isRamadan ? 'text-primary-500' : 'text-slate-400'}`} />
-                <span>{isToday ? 'Next Milestone' : 'Timeline'}</span>
+                <span>{isToday ? 'Next Milestone' : isPastDay ? 'Selected day' : 'Timeline'}</span>
               </div>
-              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{!isToday ? (isRamadan ? 'Ramadan View' : 'Schedule') : nextPrayerName}</h2>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                {isToday ? nextPrayerName : (isRamadan ? 'Ramadan View' : 'Schedule')}
+              </h2>
               <p className={`${isRamadan ? 'text-primary-600 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400'} font-medium text-sm`}>
                 {prayerData ? `${prayerData.date.hijri.month.en} ${prayerData.date.hijri.year}` : 'Ramadan Tracker'}
               </p>
@@ -219,20 +272,42 @@ const Dashboard: React.FC<DashboardProps> = ({
             )}
           </section>
 
-          {/* AI Quote Section */}
+          {/* Daily Wisdom: public quote or local; optional "Get AI reflection" only when user taps */}
           <section className="bg-accent-50 dark:bg-accent-950/20 border border-accent-100 dark:border-accent-900/30 p-5 rounded-3xl shadow-sm flex-1 relative group">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-accent-600" />
                 <h3 className="text-xs font-bold text-accent-700 dark:text-accent-400 uppercase tracking-widest">Daily Wisdom</h3>
               </div>
-              {isOffline && (
-                <div className="flex items-center gap-1 text-[8px] font-bold text-accent-500 uppercase tracking-tighter opacity-60 group-hover:opacity-100 transition-opacity">
-                   <CloudOff className="w-2.5 h-2.5" /> Local Sync
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {isOffline && (
+                  <div className="flex items-center gap-1 text-[8px] font-bold text-accent-500 uppercase tracking-tighter opacity-60 group-hover:opacity-100 transition-opacity">
+                    <CloudOff className="w-2.5 h-2.5" /> Local
+                  </div>
+                )}
+                {/* Only when user taps do we call Gemini; default wisdom is public API / local to avoid overuse */}
+                {isGeminiAvailable() && (
+                  <button
+                    type="button"
+                    onClick={handleGetAiReflection}
+                    disabled={aiReflectionLoading || wisdomLoading}
+                    aria-label="Regenerate with AI"
+                    className="p-2 rounded-xl border border-accent-200 dark:border-accent-800 hover:bg-accent-100 dark:hover:bg-accent-900/30 disabled:opacity-50 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
+                  >
+                    {aiReflectionLoading ? (
+                      <RefreshCw className="w-4 h-4 text-accent-600 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 text-accent-700 dark:text-accent-400" />
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
-            <p className="text-accent-900/80 dark:text-accent-200/80 text-sm leading-relaxed italic">"{reflection}"</p>
+            {wisdomLoading ? (
+              <p className="text-accent-700/60 dark:text-accent-300/60 text-sm italic">Loading…</p>
+            ) : (
+              <p className="text-accent-900/80 dark:text-accent-200/80 text-sm leading-relaxed italic">"{reflection}"</p>
+            )}
           </section>
         </div>
       </div>
@@ -252,7 +327,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Determining Timings...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
             {prayersToDisplay.map((p, i) => {
               const showIftar = isRamadan && p.name === 'Maghrib';
               const showSehri = isRamadan && p.name === 'Fajr';

@@ -3,7 +3,7 @@
 <html lang="en" class="light">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nur Ramadan | Daily Companion</title>
     
     <!-- PWA & SEO -->
@@ -108,6 +108,8 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .dark ::-webkit-scrollbar-thumb { background: #334155; }
+        /* Safe area for notched devices */
+        .pb-safe { padding-bottom: max(2rem, env(safe-area-inset-bottom)); }
     </style>
 <script type="importmap">
 {
@@ -123,6 +125,7 @@
 </head>
 <body class="overflow-x-hidden text-slate-900 dark:text-slate-100">
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

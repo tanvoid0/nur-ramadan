@@ -323,8 +323,8 @@ const Kitchen: React.FC<KitchenProps> = ({ user }) => {
       {/* Manual Entry Modal */}
       {isManualModalOpen && (
         <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-xl flex items-end sm:items-center justify-center p-0 sm:p-6 animate-in fade-in duration-300">
-           <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[3rem] sm:rounded-[3rem] p-10 shadow-2xl relative animate-in slide-in-from-bottom-full duration-500 transition-colors">
-              <button onClick={() => setIsManualModalOpen(false)} className="absolute top-8 right-8 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X className="w-6 h-6" /></button>
+           <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[3rem] sm:rounded-[3rem] p-10 shadow-2xl relative animate-in slide-in-from-bottom-full duration-500 transition-colors pt-[max(2.5rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))]">
+              <button onClick={() => setIsManualModalOpen(false)} className="absolute top-8 right-8 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"><X className="w-6 h-6" /></button>
               <div className="bg-primary-50 dark:bg-primary-900/30 w-14 h-14 rounded-3xl flex items-center justify-center mb-8 border border-primary-100 dark:border-primary-800"><ClipboardList className="w-7 h-7 text-primary-600 dark:text-primary-300" /></div>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-8 font-serif">Add Legacy Recipe</h3>
               

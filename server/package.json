@@ -1,0 +1,14 @@
+{
+  "name": "nur-ramadan-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "mongodb": "^6.10.0",
+    "google-auth-library": "^9.14.0"
+  }
+}

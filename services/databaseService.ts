@@ -1,8 +1,10 @@
-
 import { User, Habit, QuranProgress, Recipe } from '../types';
+import * as api from './apiService';
 
 const DB_NAME = 'NurRamadanDB';
-const DB_VERSION = 3; // Bumped version for updated recipe store logic
+const DB_VERSION = 3;
+
+/** Cache-first: we always read/write IndexedDB for fast UX. When VITE_API_URL is set, we also sync to the backend so data is stored in the DB (e.g. MongoDB). Security: no DB credentials in the frontend; auth is via Google ID token sent to the API. */
 
 export class NurDatabase {
   private db: IDBDatabase | null = null;
@@ -43,9 +45,14 @@ export class NurDatabase {
     return transaction.objectStore(name);
   }
 
-  async saveUser(user: User): Promise<void> {
+  async saveUser(user: User, opts?: { skipApiSync?: boolean }): Promise<void> {
     const store = await this.getStore('users', 'readwrite');
-    store.put(user);
+    await new Promise<void>((resolve, reject) => {
+      const req = store.put(user);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiSaveUser(user).catch(() => {});
   }
 
   async getUser(email: string): Promise<User | null> {
@@ -56,9 +63,14 @@ export class NurDatabase {
     });
   }
 
-  async saveHabits(email: string, habits: Habit[]): Promise<void> {
+  async saveHabits(email: string, habits: Habit[], opts?: { skipApiSync?: boolean }): Promise<void> {
     const store = await this.getStore('habits', 'readwrite');
-    store.put({ userEmail: email, data: habits });
+    await new Promise<void>((resolve, reject) => {
+      const req = store.put({ userEmail: email, data: habits });
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiSaveHabits(habits).catch(() => {});
   }
 
   async getHabits(email: string): Promise<Habit[] | null> {
@@ -69,9 +81,14 @@ export class NurDatabase {
     });
   }
 
-  async saveQuran(email: string, quran: QuranProgress): Promise<void> {
+  async saveQuran(email: string, quran: QuranProgress, opts?: { skipApiSync?: boolean }): Promise<void> {
     const store = await this.getStore('quran', 'readwrite');
-    store.put({ userEmail: email, data: quran });
+    await new Promise<void>((resolve, reject) => {
+      const req = store.put({ userEmail: email, data: quran });
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiSaveQuran(quran).catch(() => {});
   }
 
   async getQuran(email: string): Promise<QuranProgress | null> {
@@ -82,10 +99,14 @@ export class NurDatabase {
     });
   }
 
-  async saveRecipe(email: string, recipe: Recipe): Promise<void> {
+  async saveRecipe(email: string, recipe: Recipe, opts?: { skipApiSync?: boolean }): Promise<void> {
     const store = await this.getStore('recipes', 'readwrite');
-    // We add the user email to the record so we can filter by it
-    store.put({ ...recipe, userEmail: email });
+    await new Promise<void>((resolve, reject) => {
+      const req = store.put({ ...recipe, userEmail: email });
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiSaveRecipe(recipe).catch(() => {});
   }
 
   async getRecipes(email: string): Promise<Recipe[]> {
@@ -100,9 +121,14 @@ export class NurDatabase {
     });
   }
 
-  async deleteRecipe(id: string): Promise<void> {
+  async deleteRecipe(id: string, opts?: { skipApiSync?: boolean }): Promise<void> {
     const store = await this.getStore('recipes', 'readwrite');
-    store.delete(id);
+    await new Promise<void>((resolve, reject) => {
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiDeleteRecipe(id).catch(() => {});
   }
 
   async clearAllData(): Promise<void> {
@@ -110,6 +136,27 @@ export class NurDatabase {
     const stores = ['users', 'habits', 'quran', 'recipes'];
     const transaction = this.db!.transaction(stores, 'readwrite');
     stores.forEach(s => transaction.objectStore(s).clear());
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  /**
+   * After login, fetch user data from the backend (when API is configured) and write it into IndexedDB cache. Returns the fetched data so the app can update state; if API is off or fails, returns null and the app keeps using existing cache.
+   */
+  async syncFromServer(email: string): Promise<{ user: User | null; habits: Habit[] | null; quran: QuranProgress | null; recipes: Recipe[] } | null> {
+    const data = await api.fetchUserDataFromServer();
+    if (!data) return null;
+    const { user, habits, quran, recipes } = data;
+    const noSync = { skipApiSync: true };
+    if (user) await this.saveUser(user, noSync);
+    if (habits) await this.saveHabits(email, habits, noSync);
+    if (quran) await this.saveQuran(email, quran, noSync);
+    if (recipes && recipes.length > 0) {
+      for (const r of recipes) await this.saveRecipe(email, r, noSync);
+    }
+    return data;
   }
 }
 

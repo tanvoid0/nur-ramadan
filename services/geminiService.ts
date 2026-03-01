@@ -1,10 +1,15 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Recipe } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// API key is set at build time via Vite (GEMINI_API_KEY in .env). If missing, AI features use local fallbacks.
+// Intention: avoid using Gemini too much. AI is only called when the user explicitly asks (e.g. recipe in Kitchen, "Generate with AI" for Daily Wisdom). We default to public API or local data so we do not spam the API; the optional AI button is for when the user wants an AI-generated reflection.
+const apiKey = process.env.API_KEY;
+let ai: GoogleGenAI | null = apiKey && typeof apiKey === "string" ? new GoogleGenAI({ apiKey }) : null;
 
 let isThrottled = false;
+
+/** Whether Gemini is available for optional user-triggered features (e.g. "Get AI reflection" button). */
+export const isGeminiAvailable = (): boolean => ai !== null;
 
 /**
  * Spiritual reflections helper with aggressive caching and throttling protection.
@@ -15,7 +20,7 @@ export const getSpiritualReflection = async (): Promise<string> => {
   const cachedDate = localStorage.getItem('nur_daily_reflection_date');
 
   if (cached && cachedDate === today) return cached;
-  if (isThrottled) return getLocalReflection();
+  if (isThrottled || !ai) return getLocalReflection();
 
   try {
     const response = await ai.models.generateContent({
@@ -37,7 +42,8 @@ export const getSpiritualReflection = async (): Promise<string> => {
   return getLocalReflection();
 };
 
-const getLocalReflection = () => {
+/** Exported for use as fallback when public quote API fails or for default wisdom. */
+export const getLocalReflection = (): string => {
   const localWisdom = [
     "The best of people are those that bring most benefit to others.",
     "Fast with your heart, not just your stomach.",
@@ -65,39 +71,16 @@ export const getRamadanGreeting = async (hour: number): Promise<string> => {
   else if (hour >= 17 && hour < 20) period = "Evening";
   else period = "Night";
 
-  const today = new Date().toDateString();
-  const cacheKey = `nur_greeting_${period}`;
-  const cached = localStorage.getItem(cacheKey);
-  const cachedDate = localStorage.getItem(`${cacheKey}_date`);
-
-  if (cached && cachedDate === today) return cached;
-
-  // Reduced frequency of AI greetings to save quota and speed up initial load
-  if (!isThrottled && Math.random() > 0.98) {
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Generate a short (max 2 words), warm Ramadan greeting for ${period}.`,
-      });
-      const aiText = (response.text || "").trim().replace(/[".]/g, "");
-      if (aiText) {
-        localStorage.setItem(cacheKey, aiText);
-        localStorage.setItem(`${cacheKey}_date`, today);
-        return aiText;
-      }
-    } catch (e: any) {
-        if (e.message?.includes('429')) isThrottled = true;
-    }
-  }
+  // Greeting is always local; no automatic AI calls.
   const periodGreetings = greetings[period];
-  return periodGreetings[Math.floor(Math.random() * periodGreetings.length)];
+  return Promise.resolve(periodGreetings[Math.floor(Math.random() * periodGreetings.length)]);
 };
 
 /**
  * Defensive recipe generation with 20s timeout and instant local fallback.
  */
 export const generateRecipe = async (type: 'Sehri' | 'Iftar', preference: string = 'healthy', isDraft: boolean = false): Promise<Recipe> => {
-  if (isThrottled) return getLocalRecipeFallback(type);
+  if (isThrottled || !ai) return getLocalRecipeFallback(type);
 
   try {
     const prompt = isDraft 

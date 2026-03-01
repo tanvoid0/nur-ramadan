@@ -61,10 +61,13 @@ const Settings: React.FC<SettingsProps> = ({
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
   );
 
+  // Keep state in sync with browser: on mount and when tab becomes visible (e.g. user granted in another tab)
   useEffect(() => {
-    if (typeof Notification !== 'undefined') {
-      setPermissionStatus(Notification.permission);
-    }
+    if (typeof Notification === 'undefined') return;
+    const sync = () => setPermissionStatus(Notification.permission);
+    sync();
+    document.addEventListener('visibilitychange', sync);
+    return () => document.removeEventListener('visibilitychange', sync);
   }, []);
 
   const requestNotificationPermission = async () => {
@@ -137,6 +140,8 @@ const Settings: React.FC<SettingsProps> = ({
 
   const isUsingGPS = !user?.manualCoords;
   const isDetecting = resolvedLocationName.includes('Detecting');
+  // Use live browser permission so UI is correct even if state was stale (e.g. granted in another tab)
+  const notificationGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
   const nSettings = user?.notificationSettings || {
     enabled: false,
     leadMinutes: 0,
@@ -243,7 +248,7 @@ const Settings: React.FC<SettingsProps> = ({
             {nSettings.enabled ? <ToggleOn className="w-10 h-10" /> : <ToggleOff className="w-10 h-10" />}
           </button>
         </div>
-        {permissionStatus !== 'granted' ? (
+        {!notificationGranted ? (
           <div className="bg-accent-50 dark:bg-accent-950/20 border border-accent-100 dark:border-accent-900/30 p-4 rounded-2xl space-y-3 text-accent-900 dark:text-accent-200">
              <div className="flex items-start gap-3"><AlertTriangle className="w-4 h-4 mt-1 shrink-0 text-accent-600" /><p className="text-xs font-medium leading-relaxed">Browser permissions required for prayer alerts.</p></div>
              <button onClick={requestNotificationPermission} className="w-full bg-accent-600 text-white py-2 rounded-xl text-xs font-bold shadow-lg shadow-accent-900/10 active:scale-95 transition-all">Grant Permission</button>

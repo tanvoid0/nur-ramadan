@@ -11,6 +11,17 @@ node_modules
 dist
 dist-ssr
 *.local
+pnpm-lock.yaml.*
+
+# Env and secrets (never commit)
+.env
+.env.local
+.env.*.local
+!.env.example
+server/.env
+*.pem
+*.key
+secrets/
 
 # Editor directories and files
 .vscode/*
