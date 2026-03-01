@@ -3,7 +3,8 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
   "installCommand": "pnpm install && cd server && npm install",
-  "rewrites": [
-    { "source": "/((?!api).*)", "destination": "/index.html" }
+  "rewrites": [{ "source": "/((?!api).*)", "destination": "/index.html" }],
+  "headers": [
+    { "source": "/(.*)", "headers": [{ "key": "Permissions-Policy", "value": "geolocation=(self)" }] }
   ]
 }

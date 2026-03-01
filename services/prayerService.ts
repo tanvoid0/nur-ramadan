@@ -20,6 +20,7 @@ export interface PrayerData {
   };
 }
 
+/** Prayer times by coordinates. Coords are sent only to Aladhan (third-party); we do not log or track location. */
 export const fetchPrayerTimes = async (lat: number, lng: number, date?: Date): Promise<PrayerData> => {
   const timestamp = date ? Math.floor(date.getTime() / 1000) : Math.floor(Date.now() / 1000);
   const response = await fetch(
@@ -30,6 +31,7 @@ export const fetchPrayerTimes = async (lat: number, lng: number, date?: Date): P
   return json.data;
 };
 
+/** Reverse geocode to show city name. Coords sent only to Nominatim (OpenStreetMap); we do not log or track. */
 export const getCityName = async (lat: number, lng: number): Promise<string> => {
   try {
     const controller = new AbortController();

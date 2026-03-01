@@ -143,20 +143,28 @@ export class NurDatabase {
   }
 
   /**
-   * After login, fetch user data from the backend (when API is configured) and write it into IndexedDB cache. Returns the fetched data so the app can update state; if API is off or fails, returns null and the app keeps using existing cache.
+   * After login, fetch user data from the backend (when API is configured) and write it into IndexedDB cache.
+   * Location (manualCoords, manualCity) is never stored on the server; we keep the device's local location so it isn't lost on sync.
    */
   async syncFromServer(email: string): Promise<{ user: User | null; habits: Habit[] | null; quran: QuranProgress | null; recipes: Recipe[] } | null> {
     const data = await api.fetchUserDataFromServer();
     if (!data) return null;
     const { user, habits, quran, recipes } = data;
     const noSync = { skipApiSync: true };
-    if (user) await this.saveUser(user, noSync);
+    let mergedUser: User | null = user;
+    if (user) {
+      const local = await this.getUser(email);
+      mergedUser = local?.manualCoords !== undefined
+        ? { ...user, manualCoords: local.manualCoords, manualCity: local.manualCity }
+        : user;
+      await this.saveUser(mergedUser, noSync);
+    }
     if (habits) await this.saveHabits(email, habits, noSync);
     if (quran) await this.saveQuran(email, quran, noSync);
     if (recipes && recipes.length > 0) {
       for (const r of recipes) await this.saveRecipe(email, r, noSync);
     }
-    return data;
+    return { ...data, user: mergedUser };
   }
 }
 

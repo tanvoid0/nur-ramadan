@@ -133,9 +133,22 @@ const App: React.FC = () => {
 
   const detectAutoLocation = useCallback((currentUser?: User) => {
     const activeUser = currentUser || user;
-    if ("geolocation" in navigator) {
-      setLocationName("Detecting...");
-      navigator.geolocation.getCurrentPosition(async (position) => {
+    const fallback = { lat: 21.4225, lng: 39.8262 };
+
+    if (!window.isSecureContext) {
+      setCoords(fallback);
+      setLocationName("USE HTTPS FOR GPS");
+      return;
+    }
+    if (!("geolocation" in navigator)) {
+      setLocationName("GPS NOT SUPPORTED");
+      setCoords(fallback);
+      return;
+    }
+
+    setLocationName("Detecting...");
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
         const { latitude, longitude } = position.coords;
         setCoords({ lat: latitude, lng: longitude });
         const city = await getCityName(latitude, longitude);
@@ -145,15 +158,25 @@ const App: React.FC = () => {
           setUser(updated);
           await db.saveUser(updated);
         }
-      }, (err) => {
-        const fallback = { lat: 21.4225, lng: 39.8262 };
+      },
+      (err: GeolocationPositionError) => {
         setCoords(fallback);
-        setLocationName("MECCA (FALLBACK)");
-      }, { enableHighAccuracy: false, timeout: 5000 });
-    } else {
-      setLocationName("GPS NOT SUPPORTED");
-      setCoords({ lat: 21.4225, lng: 39.8262 });
-    }
+        switch (err.code) {
+          case 1: // PERMISSION_DENIED
+            setLocationName("LOCATION DENIED");
+            break;
+          case 2: // POSITION_UNAVAILABLE
+            setLocationName("LOCATION UNAVAILABLE");
+            break;
+          case 3: // TIMEOUT
+            setLocationName("TIMEOUT - TRY AGAIN");
+            break;
+          default:
+            setLocationName("MECCA (FALLBACK)");
+        }
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    );
   }, [user]);
 
   useEffect(() => {

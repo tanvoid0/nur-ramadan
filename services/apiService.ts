@@ -77,9 +77,15 @@ export async function apiGetUser(): Promise<User | null> {
   }
 }
 
+/** Strip location so we never send it to our servers — used only for prayer times on device. */
+function userWithoutLocation(user: User): Omit<User, 'manualCoords' | 'manualCity'> {
+  const { manualCoords, manualCity, ...rest } = user;
+  return rest;
+}
+
 export async function apiSaveUser(user: User): Promise<void> {
   if (!isApiConfigured()) return;
-  await apiFetch<void>('/api/user', { method: 'PUT', body: JSON.stringify(user) });
+  await apiFetch<void>('/api/user', { method: 'PUT', body: JSON.stringify(userWithoutLocation(user)) });
 }
 
 export async function apiGetHabits(): Promise<Habit[] | null> {

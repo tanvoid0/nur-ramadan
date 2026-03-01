@@ -338,9 +338,13 @@ const Settings: React.FC<SettingsProps> = ({
             {isUsingGPS ? 'GPS' : 'Manual'}
           </span>
         </div>
+        <p className="text-[9px] text-slate-500 dark:text-slate-400 italic">Location is used only for prayer times. Stored on your device only — not sent to our servers or used for tracking.</p>
         <div className={`p-2 rounded-lg border transition-all ${isDetecting ? 'bg-primary-50 dark:bg-primary-900/30 border-primary-200 dark:border-primary-800 animate-pulse' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
           <div className="flex items-center justify-between"><p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Active city</p>{isDetecting && <Loader2 className="w-2.5 h-2.5 text-primary-600 animate-spin" />}</div>
           <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100">{resolvedLocationName || "Unknown"}</p>
+          {(resolvedLocationName === "LOCATION DENIED" || resolvedLocationName === "TIMEOUT - TRY AGAIN") && (
+            <p className="text-[9px] text-amber-600 dark:text-amber-400 mt-1">Allow location in browser or tap GPS Sync again.</p>
+          )}
         </div>
         <div className="relative">
           <input type="text" value={cityInput} onChange={(e) => setCityInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCitySearch()} placeholder="Search city..." className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 py-2 pl-3 pr-9 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 outline-none transition-all dark:text-white" />
