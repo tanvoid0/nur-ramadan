@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Clock, 
   MapPin, 
@@ -15,7 +16,8 @@ import {
   Flame,
   History,
   CloudOff,
-  AlertCircle
+  AlertCircle,
+  Maximize2
 } from 'lucide-react';
 import { Habit, QuranProgress, View } from '../types';
 import { getSpiritualReflection, getLocalReflection, isGeminiAvailable } from '../services/geminiService';
@@ -250,27 +252,31 @@ const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Status Card & Timer */}
         <div className="flex flex-col gap-4">
-          <section className={`p-6 rounded-3xl shadow-md border flex items-center justify-between relative overflow-hidden group transition-all flex-1 ${isRamadan ? 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
-            <div className="absolute top-0 right-0 p-2 opacity-[0.03] group-hover:scale-110 transition-transform"><Activity className="w-24 h-24" /></div>
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">
-                <Timer className={`w-3 h-3 ${isRamadan ? 'text-primary-500' : 'text-slate-400'}`} />
-                <span>{isToday ? 'Next Milestone' : isPastDay ? 'Selected day' : 'Timeline'}</span>
+          <Link to="/timer" className="block flex-1">
+            <section className={`p-6 rounded-3xl shadow-md border flex items-center justify-between relative overflow-hidden group transition-all h-full hover:shadow-lg hover:border-primary-200 dark:hover:border-primary-800 ${isRamadan ? 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
+              <div className="absolute top-0 right-0 p-2 opacity-[0.03] group-hover:scale-110 transition-transform"><Activity className="w-24 h-24" /></div>
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">
+                  <Timer className={`w-3 h-3 ${isRamadan ? 'text-primary-500' : 'text-slate-400'}`} />
+                  <span>{isToday ? 'Next Milestone' : isPastDay ? 'Selected day' : 'Timeline'}</span>
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                  {isToday ? nextPrayerName : (isRamadan ? 'Ramadan View' : 'Schedule')}
+                </h2>
+                <p className={`${isRamadan ? 'text-primary-600 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400'} font-medium text-sm`}>
+                  {prayerData ? `${prayerData.date.hijri.month.en} ${prayerData.date.hijri.year}` : 'Ramadan Tracker'}
+                </p>
               </div>
-              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                {isToday ? nextPrayerName : (isRamadan ? 'Ramadan View' : 'Schedule')}
-              </h2>
-              <p className={`${isRamadan ? 'text-primary-600 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400'} font-medium text-sm`}>
-                {prayerData ? `${prayerData.date.hijri.month.en} ${prayerData.date.hijri.year}` : 'Ramadan Tracker'}
-              </p>
-            </div>
-            {isToday && (
-              <div className="text-right relative z-10">
-                <div className={`text-3xl font-mono font-bold tracking-tighter ${isRamadan ? 'text-primary-800 dark:text-primary-300' : 'text-slate-700 dark:text-slate-200'}`}>{countdown}</div>
-                <p className="text-[10px] text-slate-400 font-bold uppercase">Remaining</p>
-              </div>
-            )}
-          </section>
+              {isToday && (
+                <div className="text-right relative z-10 flex flex-col items-end gap-1">
+                  <div className={`text-3xl font-mono font-bold tracking-tighter ${isRamadan ? 'text-primary-800 dark:text-primary-300' : 'text-slate-700 dark:text-slate-200'}`}>{countdown}</div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1">
+                    Remaining <Maximize2 className="w-3 h-3 text-primary-500" />
+                  </p>
+                </div>
+              )}
+            </section>
+          </Link>
 
           {/* Daily Wisdom: public quote or local; optional "Get AI reflection" only when user taps */}
           <section className="bg-accent-50 dark:bg-accent-950/20 border border-accent-100 dark:border-accent-900/30 p-5 rounded-3xl shadow-sm flex-1 relative group">
