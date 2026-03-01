@@ -205,7 +205,7 @@ const App: React.FC = () => {
       const isIftar = prayer === 'Maghrib';
       const title = isIftar ? "Bountiful Iftar!" : `${prayer} Prayer`;
       const body = lead > 0 ? `${prayer} in ${lead}m.` : `Time for ${prayer}.`;
-      new Notification(title, { body, icon: 'https://cdn-icons-png.flaticon.com/512/3669/3669967.png', tag: 'prayer-reminder' });
+      new Notification(title, { body, icon: '/nur-ramadan-logo.png', tag: 'prayer-reminder' });
     }
   };
 
