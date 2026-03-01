@@ -15,8 +15,7 @@ pnpm-lock.yaml.*
 
 # Env and secrets (never commit)
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 server/.env
 *.pem
@@ -33,3 +32,5 @@ secrets/
 *.njsproj
 *.sln
 *.sw?
+.vercel
+.env*.local
