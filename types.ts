@@ -46,9 +46,17 @@ export interface User {
 export interface Habit {
   id: string;
   title: string;
+  /** Optional emoji or short icon label for this habit. */
+  icon?: string;
   category: TaskCategory;
   type: HabitType;
   // Metadata
+  /** Optional user-defined group label when category is Custom. */
+  customCategoryLabel?: string;
+  /** Optional daily reminder toggle for this habit. */
+  reminderEnabled?: boolean;
+  /** Reminder time in HH:MM (24h) for daily reminder. */
+  reminderTime?: string;
   unit?: string;
   step?: number;
   targetValue?: number;

@@ -5,6 +5,7 @@ import { Moon, Star, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import { User } from '../types';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+const IS_DEV = import.meta.env.MODE !== 'production';
 
 interface GoogleJwtPayload {
   sub: string;
@@ -110,7 +111,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                 <p>Set <code className="bg-black/20 px-1 rounded">VITE_GOOGLE_CLIENT_ID</code> in your <code className="bg-black/20 px-1 rounded">.env</code> and create OAuth credentials in Google Cloud Console. Add your app URL to Authorized JavaScript origins.</p>
               </div>
             )}
-            {GOOGLE_CLIENT_ID && (
+            {GOOGLE_CLIENT_ID && IS_DEV && (
               <p className="text-primary-300/60 text-[10px] text-center">If the Google button doesn&apos;t load, add <code className="bg-black/20 px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : 'your origin'}</code> to Authorized JavaScript origins in Google Cloud Console and try disabling ad blockers.</p>
             )}
 

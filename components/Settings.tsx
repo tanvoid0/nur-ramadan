@@ -1,15 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  MapPin, 
-  Search, 
-  Navigation, 
-  User as UserIcon, 
-  Check, 
-  Mail, 
-  Edit3, 
-  Loader2, 
-  Crosshair, 
+import { Link } from 'react-router-dom';
+import {
+  MapPin,
+  User as UserIcon,
+  Check,
+  Mail,
+  Edit3,
   ShieldCheck,
   Database,
   Download,
@@ -27,11 +24,14 @@ import {
   Layout,
   Sun,
   Moon,
-  MapPinOff
+  HelpCircle,
+  Sparkles
 } from 'lucide-react';
 import { User as UserType, Habit, QuranProgress, PrayerNotificationSettings, ClockStyle, Theme } from '../types';
-import { findCoordsByCity } from '../services/prayerService';
 import { db } from '../services/databaseService';
+import { isAnonymousUser } from '../utils/auth';
+import LocationPicker from './LocationPicker';
+import SignInToUnlock from './SignInToUnlock';
 
 interface SettingsProps {
   user: UserType | null;
@@ -52,11 +52,8 @@ const Settings: React.FC<SettingsProps> = ({
   habits,
   quran
 }) => {
-  const [cityInput, setCityInput] = useState(user?.manualCity || '');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState(user?.name || '');
-  const [loading, setLoading] = useState(false);
-  const [gpsLoading, setGpsLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>(
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
@@ -117,55 +114,10 @@ const Settings: React.FC<SettingsProps> = ({
     updateNotificationSettings({ prayers: { ...current, [prayer]: !current[prayer] } });
   };
 
-  const handleCitySearch = async () => {
-    if (!cityInput.trim()) return;
-    setLoading(true);
-    const result = await findCoordsByCity(cityInput);
-    if (result && user) {
-      const updatedUser = { ...user, manualCoords: { lat: result.lat, lng: result.lng }, manualCity: result.name };
-      onUpdateUser(updatedUser);
-      setCityInput(result.name);
-      setMsg('Location updated to ' + result.name);
-    } else {
-      setMsg('Could not find city. Try another name.');
-    }
-    setLoading(false);
-  };
-
   const saveProfile = () => {
     if (user && editName.trim()) {
       onUpdateUser({ ...user, name: editName });
       setIsEditingProfile(false);
-    }
-  };
-
-  const handleResetLocation = () => {
-    setGpsLoading(true);
-    if (user) {
-      onUpdateUser({ ...user, manualCoords: undefined, manualCity: undefined });
-      onDetectLocation();
-      setCityInput('');
-      setTimeout(() => setGpsLoading(false), 1500);
-    }
-  };
-
-  /** Stop using GPS; use default (Mecca) so we no longer access device location until user taps GPS Sync. */
-  const handleStopUsingLocation = () => {
-    if (!user) return;
-    const mecca = { lat: 21.4225, lng: 39.8262 };
-    onUpdateUser({ ...user, manualCoords: mecca, manualCity: 'MECCA (DEFAULT)' });
-    setCityInput('MECCA (DEFAULT)');
-    setMsg('Location set to default. We will not use your device location until you tap GPS Sync.');
-  };
-
-  /** Clear saved location and re-detect (will ask for GPS again). */
-  const handleClearSavedLocation = () => {
-    setGpsLoading(true);
-    if (user) {
-      onUpdateUser({ ...user, manualCoords: undefined, manualCity: undefined });
-      setCityInput('');
-      onDetectLocation();
-      setTimeout(() => setGpsLoading(false), 1500);
     }
   };
 
@@ -180,8 +132,6 @@ const Settings: React.FC<SettingsProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const isUsingGPS = !user?.manualCoords;
-  const isDetecting = resolvedLocationName.includes('Detecting');
   // Use live browser permission so UI is correct even if state was stale (e.g. granted in another tab)
   const notificationGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
   const nSettings = user?.notificationSettings || {
@@ -200,9 +150,22 @@ const Settings: React.FC<SettingsProps> = ({
     { code: 'tr-TR', name: 'Turkish (Turkey)' }
   ];
 
+  const showTutorialAgain = () => {
+    try {
+      localStorage.removeItem('nur_tutorial_done');
+      window.dispatchEvent(new CustomEvent('nur-show-tour'));
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-500 pb-16">
       <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Account & Settings</h2>
+
+      {user && isAnonymousUser(user) ? (
+        <SignInToUnlock />
+      ) : null}
 
       {/* Profile Section */}
       <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
@@ -330,39 +293,19 @@ const Settings: React.FC<SettingsProps> = ({
         )}
       </section>
 
-      {/* Location / Zone Management */}
-      <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-2.5 transition-colors">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" /><h3 className="font-bold text-xs text-slate-800 dark:text-slate-100">Spiritual Zone</h3></div>
-          <span className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${isUsingGPS ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-            {isUsingGPS ? 'GPS' : 'Manual'}
-          </span>
+      {/* Location / Spiritual Zone - reusable LocationPicker */}
+      <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors overflow-hidden">
+        <div className="flex items-center gap-1.5 px-4 pt-3 pb-1">
+          <MapPin className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />
+          <h3 className="font-bold text-xs text-slate-800 dark:text-slate-100">Spiritual Zone</h3>
         </div>
-        <p className="text-[9px] text-slate-500 dark:text-slate-400 italic">Location is used only for prayer times. Stored on your device only — not sent to our servers or used for tracking.</p>
-        <div className={`p-2 rounded-lg border transition-all ${isDetecting ? 'bg-primary-50 dark:bg-primary-900/30 border-primary-200 dark:border-primary-800 animate-pulse' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
-          <div className="flex items-center justify-between"><p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Active city</p>{isDetecting && <Loader2 className="w-2.5 h-2.5 text-primary-600 animate-spin" />}</div>
-          <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100">{resolvedLocationName || "Unknown"}</p>
-          {(resolvedLocationName === "LOCATION DENIED" || resolvedLocationName === "TIMEOUT - TRY AGAIN") && (
-            <p className="text-[9px] text-amber-600 dark:text-amber-400 mt-1">Allow location in browser or tap GPS Sync again.</p>
-          )}
-        </div>
-        <div className="relative">
-          <input type="text" value={cityInput} onChange={(e) => setCityInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCitySearch()} placeholder="Search city..." className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 py-2 pl-3 pr-9 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 outline-none transition-all dark:text-white" />
-          <button onClick={handleCitySearch} disabled={loading} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50">{loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}</button>
-        </div>
-        <div className="flex gap-1.5">
-          <button onClick={handleResetLocation} disabled={gpsLoading || isDetecting} className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg border transition-all text-[10px] font-bold ${isUsingGPS ? 'bg-primary-50 dark:bg-primary-900/30 border-primary-100 dark:border-primary-800 text-primary-700 dark:text-primary-300' : 'border-slate-100 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>{gpsLoading || isDetecting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Navigation className="w-2.5 h-2.5" />} GPS Sync</button>
-          {isUsingGPS && (
-            <button onClick={handleStopUsingLocation} className="flex items-center justify-center gap-0.5 py-1.5 px-2 rounded-lg border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-[10px] font-bold hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors shrink-0">
-              <MapPinOff className="w-2.5 h-2.5" /> Stop
-            </button>
-          )}
-          {!isUsingGPS && 'geolocation' in navigator && (
-            <button onClick={handleClearSavedLocation} disabled={gpsLoading} className="flex-1 py-1.5 rounded-lg bg-primary-600 text-white text-[10px] font-bold hover:bg-primary-700 transition-colors flex items-center justify-center gap-1 disabled:opacity-50">
-              {gpsLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Navigation className="w-2.5 h-2.5" />} Use my location
-            </button>
-          )}
-        </div>
+        <LocationPicker
+          user={user}
+          resolvedLocationName={resolvedLocationName}
+          onUpdateUser={onUpdateUser}
+          onDetectLocation={onDetectLocation}
+          compact
+        />
       </section>
 
       {/* Database Management */}
@@ -372,6 +315,18 @@ const Settings: React.FC<SettingsProps> = ({
           <div className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary-500" /><span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">Synced</span></div>
           <button onClick={exportData} className="py-1 px-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors flex items-center gap-1 text-[10px] font-bold"><Download className="w-2.5 h-2.5" /> Backup</button>
         </div>
+      </section>
+
+      {/* App tour */}
+      <section className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
+        <div className="flex items-center gap-1.5 mb-2">
+          <HelpCircle className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+          <h3 className="font-bold text-xs text-slate-800 dark:text-slate-100">App tour</h3>
+        </div>
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-2">See how to navigate Home, Timer, Routine, Quran, and Kitchen.</p>
+        <button type="button" onClick={showTutorialAgain} className="flex items-center gap-1.5 py-2 px-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+          <Sparkles className="w-3.5 h-3.5" /> Show tutorial again
+        </button>
       </section>
 
       <div className="p-2.5 bg-primary-50 dark:bg-primary-950/40 rounded-lg border border-primary-100 dark:border-primary-900 flex gap-1.5">

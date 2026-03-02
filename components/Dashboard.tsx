@@ -1,10 +1,10 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Clock, 
-  MapPin, 
-  ArrowRight, 
+import {
+  Clock,
+  MapPin,
+  ArrowRight,
   Sparkles,
   Timer,
   BookOpen,
@@ -17,11 +17,15 @@ import {
   History,
   CloudOff,
   AlertCircle,
-  Maximize2
+  Maximize2,
+  Pencil
 } from 'lucide-react';
-import { Habit, QuranProgress, View } from '../types';
+import { Habit, QuranProgress, User, View } from '../types';
 import { getSpiritualReflection, getLocalReflection, isGeminiAvailable } from '../services/geminiService';
 import { PrayerData } from '../services/prayerService';
+import { isAnonymousUser } from '../utils/auth';
+import LocationPickerModal from './LocationPickerModal';
+import SignInToUnlock from './SignInToUnlock';
 
 const QUOTABLE_URL = 'https://api.quotable.io/random';
 
@@ -45,21 +49,28 @@ interface DashboardProps {
   prayerData: PrayerData | null;
   prayerError?: string | null;
   locationName: string;
+  user: User | null;
+  onUpdateUser: (u: User) => void;
+  onDetectLocation: () => void;
   currentDate: Date;
   onDateChange: (offset: number) => void;
   onNavigate: (view: View) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ 
-  habits, 
-  quran, 
-  prayerData, 
-  prayerError, 
-  locationName, 
-  currentDate, 
-  onDateChange, 
-  onNavigate 
+const Dashboard: React.FC<DashboardProps> = ({
+  habits,
+  quran,
+  prayerData,
+  prayerError,
+  locationName,
+  user,
+  onUpdateUser,
+  onDetectLocation,
+  currentDate,
+  onDateChange,
+  onNavigate,
 }) => {
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [reflection, setReflection] = useState<string>("Loading inspiration...");
   const [countdown, setCountdown] = useState<string>("--:--:--");
   const [nextPrayerName, setNextPrayerName] = useState<string>("Calculating...");
@@ -322,11 +333,25 @@ const Dashboard: React.FC<DashboardProps> = ({
       <section className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-bold text-slate-800 dark:text-slate-100">Prayer Times</h3>
-          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full text-[10px] text-slate-600 dark:text-slate-400 font-bold">
-            <MapPin className="w-3 h-3 text-red-500" />
+          <button
+            type="button"
+            onClick={() => setLocationModalOpen(true)}
+            className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-1.5 rounded-full text-[10px] text-slate-600 dark:text-slate-400 font-bold transition-colors min-h-[32px]"
+            aria-label="Change prayer times location"
+          >
+            <MapPin className="w-3 h-3 text-primary-500" />
             <span>{locationName}</span>
-          </div>
+            <Pencil className="w-2.5 h-2.5 opacity-60" />
+          </button>
         </div>
+        <LocationPickerModal
+          isOpen={locationModalOpen}
+          onClose={() => setLocationModalOpen(false)}
+          user={user}
+          resolvedLocationName={locationName}
+          onUpdateUser={onUpdateUser}
+          onDetectLocation={onDetectLocation}
+        />
         {!prayerData ? (
           <div className="flex flex-col items-center justify-center py-8 gap-3">
               <RefreshCw className="w-6 h-6 text-primary-600 animate-spin" />
@@ -373,6 +398,10 @@ const Dashboard: React.FC<DashboardProps> = ({
           </p>
         </button>
       </div>
+
+      {user && isAnonymousUser(user) && (
+        <SignInToUnlock className="mt-2" />
+      )}
     </div>
   );
 };

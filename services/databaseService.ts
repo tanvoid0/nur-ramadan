@@ -1,4 +1,5 @@
 import { User, Habit, QuranProgress, Recipe } from '../types';
+import { isAnonymousEmail } from '../utils/auth';
 import * as api from './apiService';
 
 const DB_NAME = 'NurRamadanDB';
@@ -52,7 +53,7 @@ export class NurDatabase {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiSaveUser(user).catch(() => {});
+    if (!opts?.skipApiSync && !isAnonymousEmail(user.email) && api.isApiConfigured()) api.apiSaveUser(user).catch(() => {});
   }
 
   async getUser(email: string): Promise<User | null> {
@@ -70,7 +71,7 @@ export class NurDatabase {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiSaveHabits(habits).catch(() => {});
+    if (!opts?.skipApiSync && !isAnonymousEmail(email) && api.isApiConfigured()) api.apiSaveHabits(habits).catch(() => {});
   }
 
   async getHabits(email: string): Promise<Habit[] | null> {
@@ -88,7 +89,7 @@ export class NurDatabase {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiSaveQuran(quran).catch(() => {});
+    if (!opts?.skipApiSync && !isAnonymousEmail(email) && api.isApiConfigured()) api.apiSaveQuran(quran).catch(() => {});
   }
 
   async getQuran(email: string): Promise<QuranProgress | null> {
@@ -106,7 +107,7 @@ export class NurDatabase {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiSaveRecipe(recipe).catch(() => {});
+    if (!opts?.skipApiSync && !isAnonymousEmail(email) && api.isApiConfigured()) api.apiSaveRecipe(recipe).catch(() => {});
   }
 
   async getRecipes(email: string): Promise<Recipe[]> {
@@ -121,14 +122,15 @@ export class NurDatabase {
     });
   }
 
-  async deleteRecipe(id: string, opts?: { skipApiSync?: boolean }): Promise<void> {
+  async deleteRecipe(id: string, opts?: { skipApiSync?: boolean; userEmail?: string }): Promise<void> {
     const store = await this.getStore('recipes', 'readwrite');
     await new Promise<void>((resolve, reject) => {
       const req = store.delete(id);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-    if (!opts?.skipApiSync && api.isApiConfigured()) api.apiDeleteRecipe(id).catch(() => {});
+    const skipApi = opts?.skipApiSync || (opts?.userEmail != null && isAnonymousEmail(opts.userEmail));
+    if (!skipApi && api.isApiConfigured()) api.apiDeleteRecipe(id).catch(() => {});
   }
 
   async clearAllData(): Promise<void> {
@@ -136,6 +138,31 @@ export class NurDatabase {
     const stores = ['users', 'habits', 'quran', 'recipes'];
     const transaction = this.db!.transaction(stores, 'readwrite');
     stores.forEach(s => transaction.objectStore(s).clear());
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  /** Remove one user's data (e.g. anonymous after migration). */
+  async clearUserData(email: string): Promise<void> {
+    if (!this.db) await this.init();
+    const stores = ['users', 'habits', 'quran', 'recipes'];
+    const transaction = this.db.transaction(stores, 'readwrite');
+    const usersStore = transaction.objectStore('users');
+    const habitsStore = transaction.objectStore('habits');
+    const quranStore = transaction.objectStore('quran');
+    const recipesStore = transaction.objectStore('recipes');
+    usersStore.delete(email);
+    habitsStore.delete(email);
+    quranStore.delete(email);
+    const allRecipes = await new Promise<(Recipe & { userEmail?: string })[]>((resolve) => {
+      const req = recipesStore.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+    });
+    for (const r of allRecipes.filter((r) => r.userEmail === email)) {
+      recipesStore.delete(r.id);
+    }
     return new Promise((resolve, reject) => {
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);

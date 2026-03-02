@@ -12,7 +12,7 @@ import {
   AlertCircle,
   Timer
 } from 'lucide-react';
-import { View, Habit, QuranProgress, User, HabitType, TaskCategory } from './types';
+import { View, Habit, HabitLog, QuranProgress, User, HabitType, TaskCategory } from './types';
 import { INITIAL_HABITS } from './constants';
 import HabitList from './components/HabitList';
 import QuranTracker from './components/QuranTracker';
@@ -22,10 +22,14 @@ import Settings from './components/Settings';
 import PageTitleBar from './components/PageTitleBar';
 import IftarTimer from './components/IftarTimer';
 import AuthView from './components/AuthView';
+import OnboardingTour from './components/OnboardingTour';
+import SignInToUnlock from './components/SignInToUnlock';
+import SignInGate from './components/SignInGate';
 import { getRamadanGreeting } from './services/geminiService';
 import { fetchPrayerTimes, getCityName, PrayerData } from './services/prayerService';
 import { db } from './services/databaseService';
 import { setAuthToken, clearAuthToken } from './services/apiService';
+import { createAnonymousUser, isAnonymousUser } from './utils/auth';
 
 function pathToView(pathname: string): View | null {
   if (pathname === '/' || pathname === '/home') return 'home';
@@ -121,6 +125,8 @@ const App: React.FC = () => {
           const legacyUser = JSON.parse(savedUserStr) as User;
           const fullUser = await db.getUser(legacyUser.email);
           setUser(fullUser || legacyUser);
+        } else {
+          setUser(createAnonymousUser());
         }
       } catch (err) {
         console.error("Database initialization failed", err);
@@ -183,7 +189,34 @@ const App: React.FC = () => {
     if (!user) return;
     const loadUserData = async () => {
       const [h, q] = await Promise.all([db.getHabits(user.email), db.getQuran(user.email)]);
-      if (h) setHabits(h);
+      if (h) {
+        const withIcons: Habit[] = h.map(habit => {
+          if (habit.icon) return habit;
+          switch (habit.title) {
+            case 'Fajr Prayer':
+            case 'Dhuhr Prayer':
+            case 'Asr Prayer':
+              return { ...habit, icon: '🕌' };
+            case 'Maghrib Prayer':
+              return { ...habit, icon: '🌇' };
+            case 'Isha Prayer':
+              return { ...habit, icon: '🌙' };
+            case 'Taraweeh':
+              return { ...habit, icon: '✨' };
+            case 'Morning Adhkar':
+              return { ...habit, icon: '🌅' };
+            case 'Evening Adhkar':
+              return { ...habit, icon: '🌃' };
+            case 'Read Quran Pages':
+              return { ...habit, icon: '📖' };
+            case 'Water Intake':
+              return { ...habit, icon: '💧' };
+            default:
+              return habit;
+          }
+        });
+        setHabits(withIcons);
+      }
       if (q) setQuran(q);
       if (user.manualCoords) {
         setCoords(user.manualCoords);
@@ -231,6 +264,44 @@ const App: React.FC = () => {
       new Notification(title, { body, icon: '/nur-ramadan-logo.png', tag: 'prayer-reminder' });
     }
   };
+
+  useEffect(() => {
+    if (!user?.notificationSettings?.enabled) return;
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const todayKey = currentDate.toISOString().split('T')[0];
+
+      habits.forEach((habit) => {
+        if (!habit.reminderEnabled || !habit.reminderTime) return;
+
+        const [hStr, mStr] = habit.reminderTime.split(':');
+        const hours = parseInt(hStr, 10);
+        const minutes = parseInt(mStr, 10);
+        if (Number.isNaN(hours) || Number.isNaN(minutes)) return;
+
+        const reminderTime = new Date(currentDate);
+        reminderTime.setHours(hours, minutes, 0, 0);
+
+        const windowMs = 5 * 60 * 1000; // 5-minute window to avoid missing the exact second
+        const diff = now.getTime() - reminderTime.getTime();
+        const key = `habit-${habit.id}-${todayKey}`;
+
+        if (diff >= 0 && diff < windowMs && lastNotified !== key) {
+          new Notification(habit.title, {
+            body: 'Time for your routine.',
+            icon: '/nur-ramadan-logo.png',
+            tag: 'habit-reminder',
+          });
+          setLastNotified(key);
+        }
+      });
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [user, habits, currentDate, lastNotified]);
 
   const refetchPrayerData = useCallback(async () => {
     if (!coords) return;
@@ -292,25 +363,112 @@ const App: React.FC = () => {
     });
   };
 
-  const updateHabitTarget = (id: string, newTarget: number, forTodayOnly: boolean) => {
+  const updateHabitTarget = (id: string, newTarget: number, scope: 'today' | 'future' | 'all') => {
     const dateKey = currentDate.toISOString().split('T')[0];
     setHabits(prev => {
-        const next = prev.map(h => {
-            if (h.id === id) {
-                if (forTodayOnly) {
-                const currentLog = h.logs[dateKey] || { completed: false, value: 0 };
-                return { ...h, logs: { ...h.logs, [dateKey]: { ...currentLog, targetOverride: newTarget, completed: currentLog.value >= newTarget } } };
-                } else { return { ...h, targetValue: newTarget }; }
+      const next = prev.map(habit => {
+        if (habit.id !== id) return habit;
+
+        const baseTargetBefore = habit.targetValue ?? 1;
+
+        if (scope === 'today') {
+          const currentLog = habit.logs[dateKey] || { completed: false, value: 0 };
+          return {
+            ...habit,
+            logs: {
+              ...habit.logs,
+              [dateKey]: {
+                ...currentLog,
+                targetOverride: newTarget,
+                completed: currentLog.value >= newTarget,
+              },
+            },
+          };
+        }
+
+        if (scope === 'future') {
+          const updatedLogs: Record<string, HabitLog> = {};
+          const entries = Object.entries(habit.logs) as [string, HabitLog][];
+
+          entries.forEach(([key, log]) => {
+            if (key < dateKey) {
+              const activeTargetBefore = log.targetOverride ?? baseTargetBefore;
+              // Preserve existing overrides, but lock in the previous base target for past days
+              if (log.targetOverride !== undefined) {
+                updatedLogs[key] = {
+                  ...log,
+                  completed: log.value >= log.targetOverride,
+                };
+              } else {
+                updatedLogs[key] = {
+                  ...log,
+                  targetOverride: activeTargetBefore,
+                  completed: log.value >= activeTargetBefore,
+                };
+              }
+            } else {
+              updatedLogs[key] = {
+                ...log,
+                completed: log.value >= (log.targetOverride ?? newTarget),
+              };
             }
-            return h;
+          });
+
+          return {
+            ...habit,
+            targetValue: newTarget,
+            logs: updatedLogs,
+          };
+        }
+
+        // scope === 'all'
+        const updatedLogsAll: Record<string, HabitLog> = {};
+        const allEntries = Object.entries(habit.logs) as [string, HabitLog][];
+        allEntries.forEach(([key, log]) => {
+          updatedLogsAll[key] = {
+            ...log,
+            targetOverride: undefined,
+            completed: log.value >= newTarget,
+          };
         });
-        if (user) db.saveHabits(user.email, next);
-        return next;
+
+        return {
+          ...habit,
+          targetValue: newTarget,
+          logs: updatedLogsAll,
+        };
+      });
+
+      if (user) db.saveHabits(user.email, next);
+      return next;
     });
   };
 
-  const addCustomHabit = (title: string, category: TaskCategory, type: HabitType, target?: number, unit?: string) => {
-    const newHabit: Habit = { id: Date.now().toString(), title, category, type, targetValue: target, unit, step: type === HabitType.COUNTER ? (unit === 'ml' ? 250 : 1) : undefined, logs: {} };
+  const addCustomHabit = (
+    title: string,
+    category: TaskCategory,
+    type: HabitType,
+    target?: number,
+    unit?: string,
+    customCategoryLabel?: string,
+    reminderEnabled?: boolean,
+    reminderTime?: string,
+    icon?: string
+  ) => {
+    const newHabit: Habit = {
+      id: Date.now().toString(),
+      title,
+      icon,
+      category,
+      type,
+      customCategoryLabel,
+      reminderEnabled,
+      reminderTime,
+      targetValue: target,
+      unit,
+      step: type === HabitType.COUNTER ? (unit === 'ml' ? 250 : 1) : undefined,
+      logs: {},
+    };
     setHabits(prev => {
         const next = [...prev, newHabit];
         if (user) db.saveHabits(user.email, next);
@@ -326,6 +484,26 @@ const App: React.FC = () => {
     });
   };
 
+  const updateHabitIcon = (id: string, icon?: string) => {
+    setHabits(prev => {
+      const next = prev.map(habit =>
+        habit.id === id ? { ...habit, icon } : habit
+      );
+      if (user) db.saveHabits(user.email, next);
+      return next;
+    });
+  };
+
+  const updateHabitMeta = (id: string, updates: Partial<Habit>) => {
+    setHabits(prev => {
+      const next = prev.map(habit =>
+        habit.id === id ? { ...habit, ...updates } : habit
+      );
+      if (user) db.saveHabits(user.email, next);
+      return next;
+    });
+  };
+
   const changeDate = (offset: number) => {
     const next = new Date(currentDate);
     next.setDate(next.getDate() + offset);
@@ -335,12 +513,12 @@ const App: React.FC = () => {
   const logout = () => {
     clearAuthToken();
     localStorage.removeItem('nur_active_user');
-    setUser(null);
     setCoords(null);
     setLocationName("Locating...");
     setHabits(INITIAL_HABITS);
     setQuran({ surah: 1, ayah: 1, juz: 1, totalAyahsRead: 0, pagesRead: 0, totalPageTarget: 604 });
-    navigate('/login');
+    setUser(createAnonymousUser());
+    navigate('/', { replace: true });
   };
 
   const isRamadan = prayerData?.date.hijri.month.number === 9;
@@ -362,23 +540,55 @@ const App: React.FC = () => {
     );
   }
 
-    // Not logged in: redirect to /login and store return path, or show login page
-  if (!user && !isInitializing) {
-    if (pathname !== '/login') {
-      sessionStorage.setItem('nur_return_to', pathname);
-      return <Navigate to="/login" replace />;
+  // On /login: show AuthView for anonymous (Sign in), redirect to home for authenticated
+  if (pathname === '/login') {
+    if (user && !isAnonymousUser(user)) {
+      const returnTo = sessionStorage.getItem('nur_return_to') || '/';
+      sessionStorage.removeItem('nur_return_to');
+      return <Navigate to={returnTo} replace />;
     }
     return (
       <AuthView
         onLogin={async (u, idToken) => {
+          const wasAnonymous = user ? isAnonymousUser(user) : false;
+          const anonymousEmail = wasAnonymous ? user!.email : null;
+
           if (idToken) setAuthToken(idToken);
           localStorage.setItem('nur_active_user', JSON.stringify(u));
           await db.saveUser(u);
-          const synced = await db.syncFromServer(u.email);
-          if (synced?.user) setUser(synced.user);
-          else setUser(u);
-          if (synced?.habits) setHabits(synced.habits);
-          if (synced?.quran) setQuran(synced.quran);
+
+          if (wasAnonymous && anonymousEmail) {
+            const [anonHabits, anonQuran, anonRecipes] = await Promise.all([
+              db.getHabits(anonymousEmail),
+              db.getQuran(anonymousEmail),
+              db.getRecipes(anonymousEmail),
+            ]);
+            const synced = await db.syncFromServer(u.email);
+            const noSync = { skipApiSync: true };
+            if (anonHabits && anonHabits.length > 0) {
+              const merged = synced?.habits && synced.habits.length > 0 ? [...synced.habits, ...anonHabits] : anonHabits;
+              setHabits(merged);
+              await db.saveHabits(u.email, merged);
+            } else if (synced?.habits) setHabits(synced.habits);
+            if (anonQuran) {
+              setQuran(anonQuran);
+              await db.saveQuran(u.email, anonQuran);
+            } else if (synced?.quran) setQuran(synced.quran);
+            if (anonRecipes.length > 0) {
+              for (const r of anonRecipes) await db.saveRecipe(u.email, r);
+            }
+            if (synced?.user) setUser(synced.user);
+            else setUser(u);
+            await db.clearUserData(anonymousEmail);
+            localStorage.removeItem('nur_anonymous_id');
+          } else {
+            const synced = await db.syncFromServer(u.email);
+            if (synced?.user) setUser(synced.user);
+            else setUser(u);
+            if (synced?.habits) setHabits(synced.habits);
+            if (synced?.quran) setQuran(synced.quran);
+          }
+
           const returnTo = sessionStorage.getItem('nur_return_to') || '/';
           sessionStorage.removeItem('nur_return_to');
           navigate(returnTo, { replace: true });
@@ -387,17 +597,18 @@ const App: React.FC = () => {
     );
   }
 
-  // Logged in but on /login: redirect to home or return path
-  if (user && pathname === '/login') {
-    const returnTo = sessionStorage.getItem('nur_return_to') || '/';
-    sessionStorage.removeItem('nur_return_to');
-    return <Navigate to={returnTo} replace />;
-  }
-
   if (user && pathname === '/timer') {
     return (
       <ErrorBoundary>
-        <IftarTimer prayerData={prayerData} prayerError={prayerError} onRetry={refetchPrayerData} />
+        <IftarTimer
+          prayerData={prayerData}
+          prayerError={prayerError}
+          locationName={locationName}
+          user={user}
+          onUpdateUser={async (u) => { await db.saveUser(u); setUser(u); }}
+          onDetectLocation={() => detectAutoLocation()}
+          onRetry={refetchPrayerData}
+        />
       </ErrorBoundary>
     );
   }
@@ -421,32 +632,36 @@ const App: React.FC = () => {
               <h1 className="text-lg font-serif font-semibold">Nur Ramadan</h1>
             </div>
             <nav className="space-y-0.5">
-              <SidebarLink active={pathname === '/' || pathname === '/home'} icon={<Home />} label="Home" to="/" />
-              <SidebarLink active={pathname === '/timer'} icon={<Timer />} label="Iftar Timer" to="/timer" />
-              <SidebarLink active={pathname === '/habits'} icon={<CheckSquare />} label="Routine" to="/habits" />
-              <SidebarLink active={pathname === '/quran'} icon={<BookOpen />} label="Quran" to="/quran" />
-              <SidebarLink active={pathname === '/kitchen'} icon={<Utensils />} label="Kitchen" to="/kitchen" />
-              <SidebarLink active={pathname === '/settings'} icon={<SettingsIcon />} label="Settings" to="/settings" />
+              <SidebarLink active={pathname === '/' || pathname === '/home'} icon={<Home />} label="Home" to="/" dataTour="home" />
+              <SidebarLink active={pathname === '/timer'} icon={<Timer />} label="Iftar Timer" to="/timer" dataTour="timer" />
+              <SidebarLink active={pathname === '/habits'} icon={<CheckSquare />} label="Routine" to="/habits" dataTour="habits" />
+              <SidebarLink active={pathname === '/quran'} icon={<BookOpen />} label="Quran" to="/quran" dataTour="quran" />
+              <SidebarLink active={pathname === '/kitchen'} icon={<Utensils />} label="Kitchen" to="/kitchen" dataTour="kitchen" />
+              <SidebarLink active={pathname === '/settings'} icon={<SettingsIcon />} label="Settings" to="/settings" dataTour="settings" />
             </nav>
           </div>
           <div className="mt-auto p-4 border-t border-white/5">
-            <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/5">
-              <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center text-sm font-bold overflow-hidden shrink-0">
-                {user?.photo ? (
-                  <>
-                    <img src={user.photo} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-                    <span className="hidden w-full h-full flex items-center justify-center">{user?.name?.charAt(0)}</span>
-                  </>
-                ) : (
-                  <span>{user?.name?.charAt(0)}</span>
-                )}
+            {isAnonymousUser(user) ? (
+              <SignInToUnlock compact />
+            ) : (
+              <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/5">
+                <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center text-sm font-bold overflow-hidden shrink-0">
+                  {user?.photo ? (
+                    <>
+                      <img src={user.photo} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                      <span className="hidden w-full h-full flex items-center justify-center">{user?.name?.charAt(0)}</span>
+                    </>
+                  ) : (
+                    <span>{user?.name?.charAt(0)}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <p className="text-xs font-bold truncate">{user?.name}</p>
+                  <p className="text-[9px] text-white/40 truncate">{user?.email}</p>
+                </div>
+                <button onClick={logout} aria-label="Logout" className="p-1.5 text-white/40 hover:text-white rounded-lg hover:bg-white/5 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"><LogOut className="w-4 h-4" /></button>
               </div>
-              <div className="flex-1 min-w-0 overflow-hidden">
-                <p className="text-xs font-bold truncate">{user?.name}</p>
-                <p className="text-[9px] text-white/40 truncate">{user?.email}</p>
-              </div>
-              <button onClick={logout} aria-label="Logout" className="p-1.5 text-white/40 hover:text-white rounded-lg hover:bg-white/5 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"><LogOut className="w-4 h-4" /></button>
-            </div>
+            )}
           </div>
         </aside>
 
@@ -458,7 +673,12 @@ const App: React.FC = () => {
                 {hijriLabel}
               </span>
             );
-            const mobileActions = (
+            const mobileActions = isAnonymousUser(user) ? (
+              <>
+                <Link to="/settings" aria-label="Settings" className="bg-white/10 p-2 rounded-xl border border-white/15 min-w-[40px] min-h-[40px] flex items-center justify-center hover:bg-white/15 transition-colors"><SettingsIcon className="w-4 h-4" /></Link>
+                <Link to="/login" aria-label="Sign in" className="bg-primary-600 text-white px-3 py-2 rounded-xl border border-primary-500 min-h-[40px] flex items-center justify-center hover:bg-primary-500 transition-colors text-sm font-bold">Sign in</Link>
+              </>
+            ) : (
               <>
                 <Link to="/settings" aria-label="Settings" className="bg-white/10 p-2 rounded-xl border border-white/15 min-w-[40px] min-h-[40px] flex items-center justify-center hover:bg-white/15 transition-colors"><SettingsIcon className="w-4 h-4" /></Link>
                 <button onClick={logout} aria-label="Logout" className="bg-white/10 p-2 rounded-xl border border-white/15 min-w-[40px] min-h-[40px] flex items-center justify-center hover:bg-white/15 transition-colors"><LogOut className="w-4 h-4" /></button>
@@ -537,35 +757,49 @@ const App: React.FC = () => {
 
           <main className="flex-1 p-4 md:p-5 overflow-y-auto pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-10">
             <div className="max-w-4xl mx-auto w-full">
-              {(activeView === 'home' || pathname === '/' || pathname === '/home') && <Dashboard habits={habits} quran={quran} prayerData={prayerData} prayerError={prayerError} locationName={locationName} currentDate={currentDate} onDateChange={changeDate} onNavigate={onNavigate} />}
-              {activeView === 'habits' && <HabitList habits={habits} onToggle={toggleHabit} onUpdateValue={updateHabitValue} onUpdateTarget={updateHabitTarget} onAddHabit={addCustomHabit} onDeleteHabit={deleteHabit} prayerData={prayerData} currentDate={currentDate} />}
-              {activeView === 'quran' && <QuranTracker progress={quran} setProgress={setQuran} />}
-              {activeView === 'kitchen' && <Kitchen user={user} />}
+              {(activeView === 'home' || pathname === '/' || pathname === '/home') && <Dashboard habits={habits} quran={quran} prayerData={prayerData} prayerError={prayerError} locationName={locationName} user={user} onUpdateUser={async (u) => { await db.saveUser(u); setUser(u); }} onDetectLocation={() => detectAutoLocation()} currentDate={currentDate} onDateChange={changeDate} onNavigate={onNavigate} />}
+              {activeView === 'habits' && (
+                <HabitList
+                  habits={habits}
+                  onToggle={toggleHabit}
+                  onUpdateValue={updateHabitValue}
+                  onUpdateTarget={updateHabitTarget}
+                  onAddHabit={addCustomHabit}
+                  onDeleteHabit={deleteHabit}
+                  onUpdateHabitIcon={updateHabitIcon}
+                  onUpdateHabitMeta={updateHabitMeta}
+                  prayerData={prayerData}
+                  currentDate={currentDate}
+                />
+              )}
+              {activeView === 'quran' && (isAnonymousUser(user) ? <SignInGate title="Quran" reason="Sign in to track your reading progress and save your place." icon="quran" /> : <QuranTracker progress={quran} setProgress={setQuran} />)}
+              {activeView === 'kitchen' && (isAnonymousUser(user) ? <SignInGate title="Kitchen" reason="Sign in to get recipe ideas and save your collection." icon="kitchen" /> : <Kitchen user={user} />)}
               {activeView === 'settings' && <Settings user={user} onUpdateUser={async (u) => { await db.saveUser(u); setUser(u); }} onDetectLocation={() => detectAutoLocation()} resolvedLocationName={locationName} currentCoords={coords} habits={habits} quran={quran} />}
             </div>
           </main>
 
           <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 px-2 py-2.5 flex justify-around items-center z-50 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <NavLinkButton active={pathname === '/' || pathname === '/home'} icon={<Home />} label="Home" to="/" />
-            <NavLinkButton active={pathname === '/habits'} icon={<CheckSquare />} label="Routine" to="/habits" />
-            <NavLinkButton active={pathname === '/quran'} icon={<BookOpen />} label="Quran" to="/quran" />
-            <NavLinkButton active={pathname === '/kitchen'} icon={<Utensils />} label="Kitchen" to="/kitchen" />
+            <NavLinkButton active={pathname === '/' || pathname === '/home'} icon={<Home />} label="Home" to="/" dataTour="home" />
+            <NavLinkButton active={pathname === '/habits'} icon={<CheckSquare />} label="Routine" to="/habits" dataTour="habits" />
+            <NavLinkButton active={pathname === '/quran'} icon={<BookOpen />} label="Quran" to="/quran" dataTour="quran" />
+            <NavLinkButton active={pathname === '/kitchen'} icon={<Utensils />} label="Kitchen" to="/kitchen" dataTour="kitchen" />
           </nav>
         </div>
       </div>
+      <OnboardingTour showSignInStep={isAnonymousUser(user)} />
     </ErrorBoundary>
   );
 };
 
-const SidebarLink: React.FC<{ active: boolean; icon: React.ReactElement; label: string; to: string }> = ({ active, icon, label, to }) => (
-  <Link to={to} aria-label={label} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all min-h-[40px] ${active ? 'bg-primary-600 text-white shadow-md shadow-primary-900/30' : 'text-white/50 hover:bg-white/5 hover:text-white'}`}>
+const SidebarLink: React.FC<{ active: boolean; icon: React.ReactElement; label: string; to: string; dataTour?: string }> = ({ active, icon, label, to, dataTour }) => (
+  <Link to={to} aria-label={label} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all min-h-[40px] ${active ? 'bg-primary-600 text-white shadow-md shadow-primary-900/30' : 'text-white/50 hover:bg-white/5 hover:text-white'}`} {...(dataTour ? { 'data-tour': dataTour } : {})}>
     {React.cloneElement(icon, { className: 'w-4 h-4' } as React.HTMLAttributes<HTMLElement>)}
     <span className="text-sm font-medium">{label}</span>
   </Link>
 );
 
-const NavLinkButton: React.FC<{ active: boolean; icon: React.ReactElement; label: string; to: string }> = ({ active, icon, label, to }) => (
-  <Link to={to} aria-label={label} className={`flex flex-col items-center gap-1 transition-all min-h-[44px] justify-center min-w-[48px] ${active ? 'text-primary-600 dark:text-primary-400' : 'text-slate-400'}`}>
+const NavLinkButton: React.FC<{ active: boolean; icon: React.ReactElement; label: string; to: string; dataTour?: string }> = ({ active, icon, label, to, dataTour }) => (
+  <Link to={to} aria-label={label} className={`flex flex-col items-center gap-1 transition-all min-h-[44px] justify-center min-w-[48px] ${active ? 'text-primary-600 dark:text-primary-400' : 'text-slate-400'}`} {...(dataTour ? { 'data-tour': dataTour } : {})}>
     <div className={`p-1.5 rounded-xl transition-all ${active ? 'bg-primary-100 dark:bg-primary-900/40' : ''}`}>
       {React.cloneElement(icon, { className: 'w-5 h-5' } as React.HTMLAttributes<HTMLElement>)}
     </div>

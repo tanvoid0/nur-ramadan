@@ -90,7 +90,7 @@ const Kitchen: React.FC<KitchenProps> = ({ user }) => {
 
   const deleteRecipe = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await db.deleteRecipe(id);
+    await db.deleteRecipe(id, { userEmail: user.email });
     loadCollection();
   };
 
