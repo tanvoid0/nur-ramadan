@@ -175,15 +175,16 @@ const IftarTimer: React.FC<IftarTimerProps> = ({
           const t = now.getTime() / 1000; // seconds
 
           // Approximate sun/moon positions for cloud–cover glow
-          const pathT = primary ? (isIftar ? skyProgress : 1 - skyProgress) : 0;
+          const motionT = primary ? skyProgress : 0; // 0 → 1 as we approach the event
           const sunPathOpacity = primary
             ? Math.max(0, Math.min(1, isIftar ? 1 - skyProgress : skyProgress))
             : 0;
           const moonPathOpacity = primary ? 1 - sunPathOpacity : 0;
-          const sunXPos = 5 + pathT * 70;
-          const moonXPos = 5 + (1 - pathT) * 70;
-          const sunYPos = isDayPhase ? 20 : 24;
-          const moonYPos = isDayPhase ? 30 : 22;
+
+          const sunXPos = isDayPhase ? 18 : 22;
+          const moonXPos = isDayPhase ? 82 : 78;
+          const sunYPos = (isDayPhase ? 12 : 16) + motionT * 20; // moves downward
+          const moonYPos = (isDayPhase ? 18 : 20) + motionT * 18;
 
           const clouds = [
             {
@@ -318,6 +319,7 @@ const IftarTimer: React.FC<IftarTimerProps> = ({
                       ? ' drop-shadow(0 0 22px rgba(226, 232, 240, 0.8))'
                       : ''),
                   transition: 'opacity 400ms ease-out',
+                  zIndex: 2,
                   pointerEvents: 'none',
                 }}
               >
@@ -339,21 +341,27 @@ const IftarTimer: React.FC<IftarTimerProps> = ({
           });
         })()}
 
-        {/* Sun & Moon floating in background sky – subtle, mostly horizontal motion */}
+        {/* Sun & Moon floating in background sky – vertical motion (setting) */}
         {primary && (
           (() => {
             const t = now.getTime() / 1000;
-            const pathT = isIftar ? skyProgress : 1 - skyProgress; // 0 → 1 across path
             const sunOpacity = Math.max(0, Math.min(1, isIftar ? 1 - skyProgress : skyProgress));
             const moonOpacity = 1 - sunOpacity;
 
-            // Horizontal positions: 5% → 75% across the sky
-            const sunX = 5 + pathT * 70;
-            const moonX = 5 + (1 - pathT) * 70;
+            // Vertical motion: high → low as we approach the event
+            const motionT = skyProgress; // 0 far away, 1 near event
 
-            // Fixed vertical bands, with very gentle breathing
-            const sunBaseY = isDayPhase ? 20 : 24;
-            const moonBaseY = isDayPhase ? 30 : 22;
+            const sunX = isDayPhase ? 18 : 22;
+            const moonX = isDayPhase ? 82 : 78;
+
+            const sunStartY = isDayPhase ? 12 : 16;
+            const sunEndY = sunStartY + 20;
+            const moonStartY = isDayPhase ? 18 : 20;
+            const moonEndY = moonStartY + 18;
+
+            const sunBaseY = sunStartY + motionT * (sunEndY - sunStartY);
+            const moonBaseY = moonStartY + motionT * (moonEndY - moonStartY);
+
             const verticalBreath = Math.sin(t * 0.12) * 0.8; // < 1% viewport shift
 
             return (
@@ -366,6 +374,7 @@ const IftarTimer: React.FC<IftarTimerProps> = ({
                     top: `${sunBaseY + verticalBreath}%`,
                     transform: 'translate(-50%, -50%)',
                     opacity: sunOpacity,
+                    zIndex: 1,
                   }}
                 >
                   <div
@@ -402,6 +411,7 @@ const IftarTimer: React.FC<IftarTimerProps> = ({
                     top: `${moonBaseY + verticalBreath}%`,
                     transform: 'translate(-50%, -50%)',
                     opacity: Math.max(0, Math.min(1, moonOpacity * (isDayPhase ? 0.6 : 1))),
+                    zIndex: 1,
                   }}
                 >
                   <div
