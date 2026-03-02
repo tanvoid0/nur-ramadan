@@ -330,8 +330,17 @@ const Settings: React.FC<SettingsProps> = ({
       </section>
 
       <div className="p-2.5 bg-primary-50 dark:bg-primary-950/40 rounded-lg border border-primary-100 dark:border-primary-900 flex gap-1.5">
-        <div className="bg-primary-100 dark:bg-primary-900/60 w-5 h-5 rounded flex items-center justify-center shrink-0"><ShieldCheck className="w-2.5 h-2.5 text-primary-600 dark:text-primary-400" /></div>
-        <p className="text-[9px] text-primary-800/80 dark:text-primary-200/80 leading-snug italic">Your progress is stored locally. Your journey is private.</p>
+        <div className="bg-primary-100 dark:bg-primary-900/60 w-5 h-5 rounded flex items-center justify-center shrink-0">
+          <ShieldCheck className="w-2.5 h-2.5 text-primary-600 dark:text-primary-400" />
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-[9px] font-bold text-primary-900/90 dark:text-primary-100 uppercase tracking-[0.16em]">
+            Anonymous Mode Privacy
+          </p>
+          <p className="text-[9px] text-primary-800/85 dark:text-primary-200/85 leading-snug">
+            No account is required to use Nur Ramadan. Your fasting and habit data are kept in local storage on this device by default, and your optional location settings are used only to compute prayer and fasting times.
+          </p>
+        </div>
       </div>
     </div>
   );

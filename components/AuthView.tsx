@@ -76,6 +76,19 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
             <p className="text-primary-100/40 text-sm font-light leading-relaxed px-4">
               Step into a space of reflection, growth, and divine connection.
             </p>
+            <div className="mt-2 text-[10px] text-primary-100/60 leading-relaxed px-6">
+              <p className="font-semibold uppercase tracking-[0.22em] text-primary-200/70 mb-1">
+                Anonymous Mode • Titanium-grade privacy
+              </p>
+              <p className="mb-1">
+                Use Nur Ramadan without an account at any time. In Anonymous Mode:
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 text-primary-100/70">
+                <li>We don&apos;t ask for your name, email, or phone number to start.</li>
+                <li>Your fasting and habit data are stored on this device, not on our servers.</li>
+                <li>Location, if enabled, is used only to calculate local prayer and fasting times.</li>
+              </ul>
+            </div>
           </div>
 
           <div className="w-full space-y-6">

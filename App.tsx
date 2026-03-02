@@ -221,8 +221,6 @@ const App: React.FC = () => {
       if (user.manualCoords) {
         setCoords(user.manualCoords);
         setLocationName(user.manualCity?.toUpperCase() || "CUSTOM ZONE");
-      } else if (!coords) {
-        detectAutoLocation(user);
       }
     };
     loadUserData();

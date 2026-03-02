@@ -72,7 +72,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
   return (
     <div className={`space-y-4 ${padding}`}>
       <p className="text-[10px] text-slate-500 dark:text-slate-400 italic">
-        Location is used only for prayer times. Stored on your device only.
+        Location is optional. It is used only to calculate prayer and fasting times, and your chosen city or coordinates stay on this device.
       </p>
 
       {/* Current location summary */}
