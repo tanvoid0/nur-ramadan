@@ -21,7 +21,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { Habit, QuranProgress, User, View } from '../types';
-import { getSpiritualReflection, getLocalReflection, isGeminiAvailable } from '../services/geminiService';
+import { getSpiritualReflection, getLocalReflection } from '../services/geminiService';
 import { PrayerData } from '../services/prayerService';
 import { isAnonymousUser } from '../utils/auth';
 import LocationPickerModal from './LocationPickerModal';
@@ -101,7 +101,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, []);
 
   const handleGetAiReflection = async () => {
-    if (!isGeminiAvailable()) return;
     setAiReflectionLoading(true);
     try {
       const text = await getSpiritualReflection();
@@ -303,21 +302,19 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                 )}
                 {/* Only when user taps do we call Gemini; default wisdom is public API / local to avoid overuse */}
-                {isGeminiAvailable() && (
-                  <button
-                    type="button"
-                    onClick={handleGetAiReflection}
-                    disabled={aiReflectionLoading || wisdomLoading}
-                    aria-label="Regenerate with AI"
-                    className="p-2 rounded-xl border border-accent-200 dark:border-accent-800 hover:bg-accent-100 dark:hover:bg-accent-900/30 disabled:opacity-50 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
-                  >
-                    {aiReflectionLoading ? (
-                      <RefreshCw className="w-4 h-4 text-accent-600 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 text-accent-700 dark:text-accent-400" />
-                    )}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleGetAiReflection}
+                  disabled={aiReflectionLoading || wisdomLoading}
+                  aria-label="Regenerate with AI"
+                  className="p-2 rounded-xl border border-accent-200 dark:border-accent-800 hover:bg-accent-100 dark:hover:bg-accent-900/30 disabled:opacity-50 transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
+                >
+                  {aiReflectionLoading ? (
+                    <RefreshCw className="w-4 h-4 text-accent-600 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 text-accent-700 dark:text-accent-400" />
+                  )}
+                </button>
               </div>
             </div>
             {wisdomLoading ? (

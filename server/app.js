@@ -4,6 +4,7 @@
 import express from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { connect, getCollections } from './db.js';
+import { rateLimit, reflection, recipe } from './ai.js';
 
 const GOOGLE_CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
@@ -40,6 +41,9 @@ function authMiddleware(req, res, next) {
     next();
   }).catch(() => res.status(401).json({ error: 'Unauthorized' }));
 }
+
+app.post('/api/reflection', rateLimit, reflection);
+app.post('/api/ai-recipe', rateLimit, recipe);
 
 // Routes use getCollections() so they work after connect() has run
 app.get('/api/user', authMiddleware, async (req, res) => {

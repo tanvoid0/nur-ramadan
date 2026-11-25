@@ -37,7 +37,7 @@ pnpm preview   # optional: test production build locally
 Deploy the `dist` folder to any static host (Vercel, Netlify, etc.). Ensure:
 
 - **SPA fallback**: The app is a single-page app with client-side routing. The server must serve `index.html` for all routes (e.g. `/`, `/habits`, `/quran`, `/kitchen`, `/settings`, `/login`) so deep links and refresh work. On Netlify add a `_redirects` file with `/* /index.html 200`; on Vercel use a `rewrites` entry to `/index.html`.
-- **Env in build**: `GEMINI_API_KEY` (optional) and `VITE_GOOGLE_CLIENT_ID` are set in the build environment (e.g. in the host’s env / build settings). `VITE_*` is embedded at build time.
+- **Env in build**: `VITE_GOOGLE_CLIENT_ID` is set in the build environment; `VITE_*` is embedded at build time. `GEMINI_API_KEY` (optional) is a runtime secret for the API only (see `server/ai.js`); never give it a `VITE_` prefix.
 - **Authorized origins**: In Google Cloud, add your production origin (e.g. `https://yourdomain.com`) to the OAuth client’s authorized JavaScript origins.
 
 ## What’s real (no mocks)
@@ -46,7 +46,7 @@ Deploy the `dist` folder to any static host (Vercel, Netlify, etc.). Ensure:
 - **Prayer times**: [Aladhan API](https://aladhan.com/prayer-times-api) by coordinates.
 - **Location**: Browser geolocation or city search (Nominatim). Fallback to Mecca if location fails.
 - **Data**: IndexedDB in the browser for fast reads and offline use. When `VITE_API_URL` is set, user-specific data (profile, habits, Quran, recipes) is also synced to your backend (e.g. MongoDB via the included [server](server/README.md)). The app always reads from the cache first; writes go to the cache and then to the API in the background. **Security**: no database credentials or secrets are ever in the frontend; the backend validates the Google ID token on every request.
-- **AI**: We avoid using Gemini more than needed. AI is only called when you explicitly ask: recipe generation in Kitchen (e.g. “Surprise Me”) and the optional “Generate with AI” button for Daily Wisdom. By default, greeting and Daily Wisdom use local or public (Quotable) data so we don’t hit the API on every load. If `GEMINI_API_KEY` is not set, those AI actions are hidden or use local fallbacks.
+- **AI**: We avoid using Gemini more than needed. AI is only called when you explicitly ask: recipe generation in Kitchen (e.g. “Surprise Me”) and the optional “Generate with AI” button for Daily Wisdom. By default, greeting and Daily Wisdom use local or public (Quotable) data so we don’t hit the API on every load. AI calls go through the API; without it or without `GEMINI_API_KEY`, those actions use local fallbacks. In local dev run `pnpm dev:all` with `VITE_API_URL=http://localhost:4000`.
 
 ## Optional: MongoDB backend
 

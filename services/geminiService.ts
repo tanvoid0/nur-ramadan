@@ -1,15 +1,22 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { Recipe } from "../types";
 
-// API key is set at build time via Vite (GEMINI_API_KEY in .env). If missing, AI features use local fallbacks.
+// Gemini is called by our server (server/ai.js); the key never reaches the client. If the API is missing or fails, AI features use local fallbacks.
 // Intention: avoid using Gemini too much. AI is only called when the user explicitly asks (e.g. recipe in Kitchen, "Generate with AI" for Daily Wisdom). We default to public API or local data so we do not spam the API; the optional AI button is for when the user wants an AI-generated reflection.
-const apiKey = process.env.API_KEY;
-let ai: GoogleGenAI | null = apiKey && typeof apiKey === "string" ? new GoogleGenAI({ apiKey }) : null;
+// Unset VITE_API_URL means same origin (Vercel serves /api next to the app).
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+
+const postAi = async <T>(path: string, body: unknown = {}): Promise<T> => {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!response.ok) throw new Error(`AI request failed: ${response.status}`);
+  return response.json();
+};
 
 let isThrottled = false;
-
-/** Whether Gemini is available for optional user-triggered features (e.g. "Get AI reflection" button). */
-export const isGeminiAvailable = (): boolean => ai !== null;
 
 /**
  * Spiritual reflections helper with aggressive caching and throttling protection.
@@ -20,14 +27,10 @@ export const getSpiritualReflection = async (): Promise<string> => {
   const cachedDate = localStorage.getItem('nur_daily_reflection_date');
 
   if (cached && cachedDate === today) return cached;
-  if (isThrottled || !ai) return getLocalReflection();
+  if (isThrottled) return getLocalReflection();
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: "Give me a short, 1-sentence spiritual reflection or Hadith for today in Ramadan. Focus on mercy, patience, or gratitude.",
-    });
-    const text = (response.text || "").trim();
+    const text = ((await postAi<{ text?: string }>('/api/reflection')).text || "").trim();
     if (text) {
       localStorage.setItem('nur_daily_reflection', text);
       localStorage.setItem('nur_daily_reflection_date', today);
@@ -80,47 +83,10 @@ export const getRamadanGreeting = async (hour: number): Promise<string> => {
  * Defensive recipe generation with 20s timeout and instant local fallback.
  */
 export const generateRecipe = async (type: 'Sehri' | 'Iftar', preference: string = 'healthy', isDraft: boolean = false): Promise<Recipe> => {
-  if (isThrottled || !ai) return getLocalRecipeFallback(type);
+  if (isThrottled) return getLocalRecipeFallback(type);
 
   try {
-    const prompt = isDraft 
-      ? `Task: Create a structured Ramadan ${type} recipe based on user ideas: "${preference}". Output valid JSON with name, ingredients (array), instructions (string), and nutrition (string).`
-      : `Task: Suggest a unique, nourishing Ramadan ${type} recipe. Context: ${preference}. Focus on slow-release energy and hydration. Output valid JSON with name, ingredients (array), instructions (string), and nutrition (string).`;
-
-    // 20 second timeout for better reliability during peaks
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Request Timeout")), 20000)
-    );
-
-    const apiPromise = ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
-            instructions: { type: Type.STRING },
-            nutrition: { type: Type.STRING }
-          },
-          required: ["name", "ingredients", "instructions", "nutrition"]
-        }
-      }
-    });
-
-    const response = await Promise.race([apiPromise, timeoutPromise]) as any;
-    
-    // Robust text extraction
-    let text = response.text || "{}";
-    
-    // Clean potential markdown code blocks if the API fails to strictly follow responseMimeType
-    if (text.startsWith("```")) {
-        text = text.replace(/```json|```/g, "").trim();
-    }
-
-    const data = JSON.parse(text);
+    const data = await postAi<Pick<Recipe, 'name' | 'ingredients' | 'instructions' | 'nutrition'>>('/api/ai-recipe', { type, preference: preference.slice(0, 1000), isDraft });
     return {
         ...data,
         id: Date.now().toString(),
